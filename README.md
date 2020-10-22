@@ -1,6 +1,6 @@
 
 <p align="center">
-<img align="center"   src="/img/cell-to-patient.png" alt="cell2patient Logo">
+<img align="center"   src="/img/cell2patient.png" alt="cell2patient Logo">
 </p>
 
 
