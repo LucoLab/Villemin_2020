@@ -20,8 +20,8 @@ A cell-to-patient machine learning transfer approach uncovers novel basal-like b
 ```shell
 
 python  classification_semi_expression.py \
-	 -c ${dir_analysis}MatriceExonTPM_CellLines.csv \
-	 -p ${dir_analysis}MatriceExonTPM_Patients.csv \
+	 -c MatriceExonTPM_CellLines.csv \
+	 -p MatriceExonTPM_Patients.csv \
 	 -t 0.6 \
 	 -n 1000 
 
