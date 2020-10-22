@@ -28,8 +28,8 @@ They call one R script to plot survival over the rounds of  classification.
 ```shell
 
 python  classification_cell2patient_splicing.py \
-	 -c {absolutepath2}/MatriceExonPSI_CellLines.csv \
-	 -p {absolutepath2}/MatriceExonPSI_Patients.csv \
+	 -c {absolutepath}/MatriceExonPSI_CellLines.csv \
+	 -p {absolutepath}/MatriceExonPSI_Patients.csv \
 	 -t 0.6 \
 	 -n 1000 \ 
 ```
@@ -37,8 +37,8 @@ python  classification_cell2patient_splicing.py \
 ```shell
 
 python  classification_cell2patient_expression.py \
-	 -c {absolutepath2}/MatriceExonTPM_CellLines.csv \
-	 -p {absolutepath2}/MatriceExonTPM_Patients.csv \
+	 -c {absolutepath}/MatriceGeneTPM_CellLines.csv \
+	 -p {absolutepath}/MatriceGeneTPM_Patients.csv \
 	 -t 0.6 \
 	 -n 1000 
 

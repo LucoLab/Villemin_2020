@@ -1,18 +1,15 @@
 
 '''
 
-:date: October 22, 2020
+:date: October 22, 2019
 :platform: MacOS 
 
 :author: Villemin Jean-Philippe
 :team: Epigenetic Component of Alternative Splicing - IGH
 
-:synopsis:     A cell-to-patient machine learning transfer approach to classified patients using cell lines.  
+:synopsis:    A cell-to-patient machine learning transfer approach to classified patients using cell lines.  
 
 '''
-# ignore all future warnings
-from warnings import simplefilter
-simplefilter(action='ignore', category=FutureWarning)
 from pathlib import Path
 import glob
 import argparse,textwrap
@@ -58,35 +55,21 @@ from scipy import interp
 from sklearn.feature_selection import RFECV
 from datetime import datetime
 from sklearn.preprocessing import Binarizer,KBinsDiscretizer 
-import sklearn
+import sklearn #0.19.1 conda 4.5.11
 import matplotlib
+from warnings import simplefilter
 import time
 import sys
+from statistics import mode
 from collections import Counter
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from boruta import BorutaPy
-import copy 
-import scipy.cluster.hierarchy as sch
-from sklearn.decomposition import IncrementalPCA
+from sklearn.preprocessing import MinMaxScaler
+
+# ignore all future warnings
+simplefilter(action='ignore', category=FutureWarning)
 
 ###########################################################################################################
 ########################################   Functions   ####################################################
 ###########################################################################################################
-
-
-def wordListToFreqDict(wordlist):
-    """
-    Count number of occurencies of a list of string.
-
-    Args:
-        wordlist(array)     : list of strings
-
-    Returns:
-        dict(list(zip(wordlist,wordfreq))) : Dictionary with string associated with number of occurencies.
-
-    """
-    wordfreq = [wordlist.count(p) for p in wordlist]
-    return dict(list(zip(wordlist,wordfreq)))
 
 def all_features_importances (importances,genes,X) :
     
@@ -112,11 +95,11 @@ def plot_features_importances (importances,clf,genes,id_cv,nbfeaturesOfImportanc
         importances(object)     : Features of importance return by sklean - clf.feature_importances_
         clf(object)             : model used
         genes(list)             : list of features - genes.
-        id_cv                    : tag for the iteration of the cross validation.
+        id_cv                      : tag for the iteration of the cross validation.
         nbfeaturesOfImportance(int) : number of features of importance.
-        pathOutput(str)          :  The output path to write the files.
-        tag(str)                 :  Tag to annotated the output files.
-        X(?)                     : Values for all features group by samples.
+        pathOutput(str)         :  The output path to write the files.
+        tag(str)         :  Tag to annotated the output files.
+        X(?)         : Values for all features group by samples.
     
     
     Returns:
@@ -131,6 +114,7 @@ def plot_features_importances (importances,clf,genes,id_cv,nbfeaturesOfImportanc
     
     # Return indice of the biggest value to the smalest 
     indices = np.argsort(importances)[::-1]
+    
 
     #result = open(pathOutput+tag+"_features"+str(id_cv)+".txt","w")
 
@@ -160,7 +144,7 @@ def plot_features_importances (importances,clf,genes,id_cv,nbfeaturesOfImportanc
     plt.bar(range(X.shape[1]), importances[indices],color="r", yerr=std[indices], align="center")
     plt.xticks(range(nbfeaturesOfImportance), genesToPlot[:nbfeaturesOfImportance],rotation='vertical')
     plt.margins(0.3)
-    
+ 
     # Tweak spacing to prevent clipping of tick-labels
     plt.subplots_adjust(bottom=0.60)
     #plt.tight_layout
@@ -168,13 +152,12 @@ def plot_features_importances (importances,clf,genes,id_cv,nbfeaturesOfImportanc
     plt.show()
     plt.savefig(pathOutput+tag+"_features"+str(id_cv)+".png" )
     plt.close()
-    '''
+       '''
     return sorted(dict_best.items(), key=lambda x: x[1], reverse=True)
 
 
 
-
-def import_data_used2_create_model(ccle,label,zscore_choice):
+def import_data_used2_create_model_expression(ccle,label,zscore_choice):
     """
     Import data from dataframe. Here cell lines.
   
@@ -199,25 +182,26 @@ def import_data_used2_create_model(ccle,label,zscore_choice):
     samplesID =  []
     for name in list(ccle.columns.values) :
         
-        if name[3].replace("Group2: ","") == label : labels.append(name[3].replace("Group2: ",""))
+        if name[0].replace("Group2: ","") == label : labels.append(name[0].replace("Group2: ",""))
         else : labels.append("Other")
         samplesID.append(name[1])
-        labels_raw.append(name[3].replace("Group2: ",""))
+        
+        labels_raw.append(name[0].replace("Group2: ",""))
         
     ccle2 = ccle.reset_index() # makes date column part of your data
-    genes = ccle2.level_0
+    genes = ccle2.level_1
     genesASarray = np.asarray(genes)
-    
+
+  
     # Impute Values you have NA
     #imp = SimpleImputer(strategy="mean",verbose=1,axis = 1)
 
-    #Axis 0 will act on all the ROWS in each COLUMN
-    #Axis 1 will act on all the COLUMNS in each ROW
-    imp = Imputer(strategy="mean",verbose=1,axis = 1)
-    imputed_matrice = imp.fit_transform(ccle.values)
-    
-    if(zscore_choice != "No") :
-        imputed_matrice = zscoreMyStuff (imputed_matrice)
+    #imp = Imputer(strategy="mean",verbose=1,axis = 1)
+    #imputed_matrice = imp.fit_transform(ccle.values)
+    imputed_matrice = np.nan_to_num(ccle.values)
+    imputed_matrice = np.log2(imputed_matrice +1)
+    #if(zscore_choice != "No") :
+        #imputed_matrice = zscoreMyStuff (imputed_matrice)
     
     ccle_values_transposed = imputed_matrice.T 
     #print("Values Transposed for each label")
@@ -232,8 +216,6 @@ def import_data_used2_create_model(ccle,label,zscore_choice):
     
     return X,Y,samplesID,genesASarray,labels_raw
 
-
-    
 def createDirUsingAPath(path,parameters):
     """
     Create a dir with datetime using a pre-defined path.
@@ -371,7 +353,7 @@ def test_and_train (clf,X,Y,nb_split,pathOutput,tag,genes,isfitted) :
         #print("TRAIN:", train_index, "TEST:", test_index)
 
         classes = np.unique(Y_test)
-        print(classes)
+        #print(classes)
         
         #print(clf)
         if (isfitted=="no") :
@@ -387,11 +369,9 @@ def test_and_train (clf,X,Y,nb_split,pathOutput,tag,genes,isfitted) :
         
         index_features_of_interest.append(arrayToKeep)
         
-        genesASarray               = np.asarray(genes)
-        genes2                     = genesASarray[arrayToKeep]
+        genesASarray = np.asarray(genes)
+        genes2        = genesASarray[arrayToKeep]
         number_feature_of_interest = len(genes2)
-        
-        #print("number_feature_of_interest"+str(number_feature_of_interest))
         
         important_features_dict = {}
         for x,i in enumerate(clf.feature_importances_):
@@ -399,6 +379,16 @@ def test_and_train (clf,X,Y,nb_split,pathOutput,tag,genes,isfitted) :
             important_features_dict[x]=i
             
         important_features_list = sorted(important_features_dict,key=important_features_dict.get,reverse=True)
+
+        #print ('Most important features: %s' %important_features_list)
+        #print("Ordered list of feature_importances  : ")
+        ##print(genes[important_features_list[0:len(genes2)]])
+        #print("Total event kept :{}" . format(len(genes2)))
+        #print(genes[important_features_list[0:len(importances)]])
+
+      
+        # Plot the best features selecte and return dict best features
+        sortedDict_bestfeatures = plot_features_importances(importances,clf,np.asarray(genes),id_cv,number_feature_of_interest,pathOutput,tag,X)
 
         # Show how the CF worked out. Number of samples picked up in train/test.
         show_split("TRAIN",Y_train,classes[0])
@@ -408,7 +398,6 @@ def test_and_train (clf,X,Y,nb_split,pathOutput,tag,genes,isfitted) :
         Y_predict        = clf.predict(X_test)
         
         train_vs_test_AUC(X_train,Y_train,X_test,Y_test,classes,0,id_cv,pathOutput,tag) 
-        
         print("==> Accuracy : ")
         print(accuracy_score(Y_test, Y_predict))
         accuracies.append(accuracy_score(Y_test, Y_predict))
@@ -457,6 +446,7 @@ def test_and_train (clf,X,Y,nb_split,pathOutput,tag,genes,isfitted) :
     
     return accuracies,aucs
     
+      
 def recap_of_common_important_features(genes,index_features_of_interest,pathOutput,tag) :    
     """
     Print all the genes in a file that seems to play a role in classification.
@@ -486,9 +476,12 @@ def recap_of_common_important_features(genes,index_features_of_interest,pathOutp
         final.write(str(f)+"\n")
     final.close()
     
+    #print("Gene of importance from the different run of cross validation")
+    #print(genes2)
 
 
-def import_data_for_prediction(patients,zscore_choice):
+
+def import_data_for_prediction_expression(patients,zscore_choice):
     """
     Import data you want to use to make some predictions on it.
   
@@ -502,40 +495,46 @@ def import_data_for_prediction(patients,zscore_choice):
         
     """
 
-    
     patientsID = []
     patientsMolSubType = []
     
     for name in list(patients.columns.values) :
- 
-        patientsID.append(name[0])
-        patientsMolSubType.append(name[3].replace("Group2:",""))
+        #print(name)
+        patientsID.append(name[1])
+        patientsMolSubType.append(name[0].replace("Group2:",""))
 
     patients1 = patients.reset_index() # makes date column part of your data
-    genes     = patients1['index']
+    genes = patients1.level_1  # Add for expression / Not in Splicing
     genesASarray = np.asarray(genes)
 
     # Impute Values you have NA
-    imp             = Imputer(strategy="mean",verbose=1,axis = 1) # axis = 0  along the column
+    #imp             = Imputer(strategy="mean",verbose=1,axis = 1) # axis = 0  along the column
     #imp             = SimpleImputer(strategy="mean",verbose=1,axis = 1) # axis = 0  along the column
 
-    imputed_matrice = imp.fit_transform(patients.values)
-    
-    if(zscore_choice != "No") :
-        imputed_matrice = zscoreMyStuff (imputed_matrice)
+    imputed_matrice = np.nan_to_num(patients.values)
+    imputed_matrice = np.log2(imputed_matrice+1)
 
-    patients_values_transposed = imputed_matrice.T 
+    patients_values_transposed = imputed_matrice.T
 
+   
     X = patients_values_transposed
     
     return X,patientsID,genesASarray,patientsMolSubType
+
+def minMaxMyStuff (matrice_values) :
+    
+    # Matrice here has already been transposed
+    scaler = MinMaxScaler()
+    matrice_zcored = scaler.fit_transform(matrice_values)
+    print (matrice_zcored)
+    
+    return matrice_zcored
 
 def zscoreMyStuff (matrice_values) :
     
     matrice_zcored = stats.zscore(matrice_values, axis=1, ddof=1)
 
     return matrice_zcored
-
 
 def read_score(fileToPathScore,list_patient_ordered) : 
 
@@ -545,6 +544,7 @@ def read_score(fileToPathScore,list_patient_ordered) :
     list_event_EPI  = [None] * len(list_patient_ordered_renamed)
     
     count = -1
+    #print(list_patient_ordered_renamed)
     with open(fileToPathScore) as lines:
         for line in lines:
            if count==-1 :
@@ -558,20 +558,24 @@ def read_score(fileToPathScore,list_patient_ordered) :
            if(m):
 
             id_renamed = m.group(1)
+            # print(id_renamed)
             if id_renamed in list_patient_ordered_renamed :
-
+              
+  
                list_event_MES[list_patient_ordered_renamed.index(id_renamed)]       = elements[1]
-               list_event_EPI[list_patient_ordered_renamed.index(id_renamed)]  = elements[3]
+               list_event_EPI[list_patient_ordered_renamed.index(id_renamed)]       = elements[3]
            
     lines.close()
-
-    M           =(np.asarray(list_event_MES).astype(np.float)).reshape(1, -1)
-    transformer = Binarizer(np.percentile(M[0], 75)).fit(M) 
-    best_M      = transformer.transform(M)   
     
-    E           =(np.asarray(list_event_EPI).astype(np.float)).reshape(1, -1)
+
+
+    M =(np.asarray(list_event_MES).astype(np.float)).reshape(1, -1)
+    transformer = Binarizer(np.percentile(M[0], 75)).fit(M) 
+    best_M = transformer.transform(M)   
+    
+    E =(np.asarray(list_event_EPI).astype(np.float)).reshape(1, -1)
     transformer = Binarizer(np.percentile(E[0], 75)).fit(E) 
-    best_E      = transformer.transform(E)   
+    best_E = transformer.transform(E)   
 
    
     list_score = [list_event_MES,best_M[0].tolist()]
@@ -636,8 +640,7 @@ def read_clinical_end_points (fileToPath,list_patient_ordered) :
            elements    = line.strip().split(";") 
            id_renamed= elements[0].replace("-",".")
            if id_renamed in list_patient_ordered_renamed :
-              
-
+ 
                list_event_OS[list_patient_ordered_renamed.index(id_renamed)] = elements[24]
                list_event_DSS[list_patient_ordered_renamed.index(id_renamed)] = elements[26]
                list_event_DFI[list_patient_ordered_renamed.index(id_renamed)] = elements[28]
@@ -650,21 +653,18 @@ def read_clinical_end_points (fileToPath,list_patient_ordered) :
     
     return list_event_global
     
-def rewriteWithUpdatedHeader(pathTofile,headerlines,tag,genes,list_event_global,id):
+
+
+def rewriteWithUpdatedHeader_expression(pathTofile,headerlines,tag,genes,list_event_global,id):
 
     result      = open(os.path.dirname(pathTofile)+"/"+tag+"_"+id+"_BASAL_HEADER_ADDED.tsv","w")
     
     if(tag=="expression"):
         for headerline in headerlines : 
-            result.write("\t"+"\t"+("\t".join(str(x) for x in headerline))+"\n")
+            result.write("\t"+"\t"+"\t"+"\t"+"\t"+"\t"+("\t".join(str(x) for x in headerline))+"\n")
         for list_event in list_event_global :
-            result.write("\t"+"\t"+("\t".join(str(x) for x in list_event))+"\n")
-    else :
-        for headerline in headerlines : 
-            result.write("\t"+("\t".join(str(x) for x in headerline))+"\n")
-        for list_event in list_event_global :
-            result.write("\t"+("\t".join(str(x) for x in list_event))+"\n")
-
+            result.write("\t"+"\t"+"\t"+"\t"+"\t"+"\t"+("\t".join(str(x) for x in list_event))+"\n")
+ 
     lineCount=0
     with open(pathTofile) as lines:
         
@@ -673,12 +673,12 @@ def rewriteWithUpdatedHeader(pathTofile,headerlines,tag,genes,list_event_global,
             if(tag=="expression"):
                 
                 if (lineCount == 0) :
-
+                    #print(line)
                     result.write(line)
                     
                 elements = line.strip().split("\t") 
 
-                if elements[1] in genes : result.write(line)
+                result.write(line)
 
             if(tag!="expression"):
                 result.write(line)
@@ -688,6 +688,7 @@ def rewriteWithUpdatedHeader(pathTofile,headerlines,tag,genes,list_event_global,
     
     result.close()
 
+ 
     
 def renamingPatients(patientHeaderToRename) : 
     
@@ -698,9 +699,26 @@ def renamingPatients(patientHeaderToRename) :
         m    = re.search('Patient:\s+(TCGA.*)_(.*)_(.*)', patient)
     
         if(m):
+         
             patientHeaderRenamed.append(m.group(1).replace("-","."))
-            
+        else : # Add for semi_expression
+            patientHeaderRenamed.append(patient)
+             
     return patientHeaderRenamed
+
+
+def reorderAsSplicing(patients,tpmDataframe):
+    
+    renamedOrderedPatients = renamingPatients(patients)
+
+    #print(renamedOrderedPatients)
+    #print(tpmDataframe.head())
+    
+    tpmDataframe_reordered = tpmDataframe[renamedOrderedPatients]
+    
+    #print(tpmDataframe_reordered.head())
+
+    return tpmDataframe_reordered
 
 
 def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,iteration) :
@@ -744,6 +762,7 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
     print(n)
     global subset_dict_best_features_of_importance
 
+
     YlistOfNewLabel     = []
     basalB_probas             = clf.predict_proba(X)[:,0]
 
@@ -752,9 +771,11 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
     global indicesRunAddedOther
   
     all_patients   = dict(zip(index, basalB_probas.tolist()))
+    #{1: 0.248, 4: 0.104, 5: 0.012}
     
     ######### ANNOTATED THE BAD ONE AS MANY AS THERE IS GOOD PATIENTS #####
     listofTuples = sorted(all_patients.items() ,  key=lambda x: x[1] ,reverse=True)
+
 
     number_bad = 0
     for elem in listofTuples[-n:] :#[-n:][-n:]
@@ -769,12 +790,15 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
         annotationNewHeader[elem[0]]     = "O" #str(iteration+1) # just had for plotting
         global_annot[elem[0]]            = "Inverse_BASALB"   
         number_bad+=1
-
+    #print("+++")
+    #print(listofTuples[:n])
+   # print(len(listofTuples[:n]))
     
     number_good = 0
     for elem in listofTuples[:n] : #[:n]
        
         if(elem[1] < threshold  ) : continue
+        #print(elem[1])
         allPatients[patientsID[elem[0]]] = "BASALB"
         index_best_patient.append(elem[0])
         YlistOfNewLabel.append('BASALB')       # YlistOfNewLabel.append('Group2: BASALB')
@@ -790,7 +814,7 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
 
     print("{} total pass a threshold ".format(len(allPatients)))
     print("{} BASALB  ".format(sum(value == "BASALB" for value in allPatients.values())))
-    print("{} BasalA  .".format(sum(value == "Inverse_BASALB" for value in allPatients.values())))
+    print("{} Inverse_BASALB  .".format(sum(value == "Inverse_BASALB" for value in allPatients.values())))
 
  
     ### CREATE THE LIST OF PATIENTS YOU WANT TO COMPARE ####
@@ -837,8 +861,6 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
 
     return basalB_probas,annotationNewHeader,bestPatientsMES,bestPatientsEPI,allPatients,X[index_best_patient],YlistOfNewLabel 
 
-
-
 def best_features_of_importance (clf,genesPatients,pathOutput,tag,X,id,i) :
         
     importances = clf.feature_importances_
@@ -848,8 +870,8 @@ def best_features_of_importance (clf,genesPatients,pathOutput,tag,X,id,i) :
     genesASarray               = np.asarray(genesPatients)
     genes2                     = genesASarray[arrayToKeep]
     number_feature_of_interest = len(genes2)
+    
 
-     
     ###### Plot the best features selected and return only the best in a dict #####
     subset_sortedDict_bestfeatures = plot_features_importances(importances,clf,np.asarray(genesPatients),id,number_feature_of_interest,pathOutput,tag,X)
     
@@ -884,17 +906,86 @@ def return_index(bigList,list) :
        
     return indexes 
 
-###########################################################################################################
-########################################   Main   ####################################################
-###########################################################################################################
+
+def compute_proba_and_add_best_from_fitted_model_core(N,clf,X,patientsID,threshold,iteration) :
+    """
+    Compute_proba_and_add_best_from_fitted_model_core
+  
+    Args:
+       N,
+       clf,
+       X,
+       patientsID : ID 
+       threshold : cut off for the probability 0.6
+       iteration : Number of the run
+
+    Returns:
+    
+        bestPatientsMES : ID  Patients annotated as MES
+        bestPatientsEPI: ID  Patients annotated as EPI
+        allPatients : For the heatmap, in each run we modified allPatients list to show if patient has been annotated B or N in at least one of the run
+        X[index_best_patient] : List of patients that have been annoted in the 10 B , 10 O passing the threshold
+        YlistOfNewLabel : The label Modified for patients ,  Patient are Annotated B or O
+     
+    """   
+    
+    count               = 0   
+    annotationNewHeader = ["-"] * len(X)
+    allPatients         = {}
+    allPatients_nothing = {}
+    index_best_patient  = []
+
+    global n
+    n = N * iteration
+  
+
+    YlistOfNewLabel     = []
+    basalB_probas             = clf.predict_proba(X)[:,0]
+
+    index               = list(range(0 ,len(X))) #< 1 - threshold
+
+    all_patients   = dict(zip(index, basalB_probas.tolist()))
+    #{1: 0.248, 4: 0.104, 5: 0.012}
+    
+    ######### ANNOTATED THE BAD ONE AS MANY AS THERE IS GOOD PATIENTS #####
+    listofTuples = sorted(all_patients.items() ,  key=lambda x: x[1] ,reverse=True)
+
+    for elem in listofTuples[-n:] :#[-n:][-n:]
+     
+        if(1 - elem[1] < threshold  ) : continue
+        
+        allPatients[patientsID[elem[0]]] = "Inverse_BASALB"
+        index_best_patient.append(elem[0])
+        YlistOfNewLabel.append('Other')
+      
+    for elem in listofTuples[:n] : #[:n]
+       
+        if(elem[1] < threshold  ) : continue
+        
+        allPatients[patientsID[elem[0]]] = "BASALB"
+        index_best_patient.append(elem[0])
+        YlistOfNewLabel.append('BASALB')      
+
+    #print("{} total pass a threshold ".format(len(allPatients)))
+    #print("{} BASALB  ".format(sum(value == "BASALB" for value in allPatients.values())))
+    #print("{} Inverse_BASALB  .".format(sum(value == "Inverse_BASALB" for value in allPatients.values())))
+
+    ### CREATE THE LIST OF PATIENTS YOU WANT TO COMPARE ####
+    bestPatientsMES = [k for k,v in allPatients.items() if v == 'BASALB'] 
+    bestPatientsEPI = [k for k,v in allPatients.items() if v == 'Inverse_BASALB'] 
+
+    return bestPatientsMES,bestPatientsEPI,allPatients,X[index_best_patient],YlistOfNewLabel 
 
        
 if __name__ == '__main__':
+    '''This is just a main '''
     
     parser = argparse.ArgumentParser(description=textwrap.dedent ('''\
-    
+
+
      A cell-to-patient machine learning transfer approach uncovers novel basal-like breast  \  
      cancer prognostic markers amongst alternative splice variants.
+
 
 
     '''),formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -904,12 +995,10 @@ if __name__ == '__main__':
     parser.add_argument("-t","--threshold",action="store",help="Threshold of the best cell lines. 0 to 1.",required=True,type=float,dest='threshold')
     parser.add_argument("-n","--nestimators",action="store",help="Zscore the values",required=True,type=int,default="No",dest='nestimators')
 
-    parser.add_argument("-r","--randomState",action="store",help="Fix RandomState",required=False,type=int,default=2955,dest='randomState')
-    parser.add_argument("-rb","--randomStateBoruta",action="store",help="Fix several RandomState for Boruta",required=False,default="Yes",type=str,dest='randomStateBoruta')
-    
     parser.add_argument("-z","--zscore",action="store",help="Zscore the values",required=False,type=str,default="No",dest='zscore')
+    parser.add_argument("-r","--randomState",action="store",help="Zscore the values",required=False,type=int,default=0,dest='randomState')
     parser.add_argument("-m","--maxdepth",action="store",help="Zscore the values",default=0,type=int,dest='maxdepth')
- 
+
     parameters = parser.parse_args()
     
     pathname                = os.path.dirname(sys.argv[0])        
@@ -919,10 +1008,11 @@ if __name__ == '__main__':
     basepathforData =  basepath+"data/"
 
     print("Files will be written in :")
-
+    
+    
     pathOutput = createDirUsingAPath(basepath,parameters)
     pathOutput = pathOutput+"/"
-    logger     = open(basepath+"/logger.txt","a")
+    logger = open(basepath+"/logger.txt","a")
     
     logger.write(str(pathOutput)+"\n")
     logger.write(str(parameters.threshold)+"\n")
@@ -932,56 +1022,57 @@ if __name__ == '__main__':
     logger.write(str(parameters.matrice_cellLines)+"\n")
     logger.write(str(parameters.matrice_patients)+"\n")
     logger.write(str(parameters.maxdepth)+"\n")
-   
+    
     maxdepth =None
     if (str(parameters.maxdepth) != "0") : 
         maxdepth = parameters.maxdepth 
     
     print('The scikit-learn version is {}.'.format(sklearn.__version__))
-    print('The matplotlib version is {}. \n'.format(matplotlib.__version__))
+    print('The matplotlib version is {}.'.format(matplotlib.__version__))
 
+    
     fileToPath              =   basepathforData+"TCGA_CDR.csv"
     fileToPathClaudinLow    =   basepathforData+"TCGA-BRCA_ClaudinLow_sorly.txt"
     fileToPathScore         =   basepathforData+"mes_epi_tcga.csv"
     
     Rscript_survival  = full_path_script_python+"/R/"+"Survival_AvsB.R"
 
-    ccle     = pd.read_csv(parameters.matrice_cellLines,sep='\t',header=[0,1,2,3],index_col=[0,1,2])
-    
-    patients = pd.read_csv(parameters.matrice_patients,sep='\t',header=list(range (0,32,1)),index_col=0)
+    ccle     = pd.read_csv(parameters.matrice_cellLines,sep=',',header=[0,1],index_col=[0,1,2,3,4,5])
 
-    XcellLines,YcellLines,samplesCellLinesName,genesCellLines,labelcellLines_raw = import_data_used2_create_model(ccle,"BASALB",parameters.zscore)
-    XPatients,patientsID,genesPatients,patientsMolSubType                        = import_data_for_prediction(patients,parameters.zscore)
+    patients = pd.read_csv(parameters.matrice_patients,sep=',',header=[0,1],index_col=[0,1,2,3,4,5])
     
+
+    XcellLines,YcellLines,samplesCellLinesName,genesCellLines,labelcellLines_raw = import_data_used2_create_model_expression(ccle,"BASALB",parameters.zscore)
+   
+    XPatients,patientsID,genesPatients,patientsMolSubType                        = import_data_for_prediction_expression(patients,parameters.zscore)
+ 
     list_event_global      = read_clinical_end_points(fileToPath,patientsID)
     list_annotation_global = read_claudinLow(fileToPathClaudinLow,patientsID)
     
-    list_scoreMesEPi = read_score(fileToPathScore,patientsID)
-
+    
+    list_scoreMesEPi = read_score(fileToPathScore,patientsID) # BUG When it's EXPRESSION ON renaming_Patient. Corrected.
+    
     mainlistAnnotations = list_event_global + list_annotation_global + list_scoreMesEPi
     
     concat_func = lambda x,y: x + "_" + str(y)
 
-    ######################################################################################################################################################################################
-    ######################################################################################################################################################################################
-    ######################################################################################################################################################################################
     
     if ( parameters.randomState  == False ) :
       random_state = np.random.randint(low=0, high=10000, size=1)[0]
     else : random_state = parameters.randomState  
-    
+
+    random_state = 5558
+     
     clf = ""
-
-
-    clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced",random_state=random_state )#random_state=13#random_state=5,,class_weight="balanced"
+    clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced" ,random_state= random_state)#random_state=13#random_state=5,,class_weight="balanced"
 
     # Global variable
     global_annot =  ["UNKNOW"] * len(XPatients)  #list(range(len(XPatients)))
 
     # Fit model  on Cell Lines
-    print("\nFit model simply on all the cell lines : ")
+    print("Fit model simply on all the cell lines : ")
+    #print(XcellLines.shape,len(YcellLines))
     clf.fit(XcellLines,YcellLines)
-   
     
     global_new_header      = []
     global_bestCandidates  = []
@@ -989,120 +1080,124 @@ if __name__ == '__main__':
     global_dict_best_features_of_importance = {} # use as global
     subset_dict_best_features_of_importance = {} # use as global
     in_best_features_for_run_num = {} # use as global
-    accuracies_per_run    = {} 
+
     probas_selected       = [] # use as global
     indicesRunAddedBasalB = [[]]
     indicesRunAddedOther  = [[]]
     all_probas_per_run    = []
-    allproba_per_run1  = {} 
+    
     bestPatientsMES_final = 0
     
     patients_added     =[ [0,0]]
-    t       = 100000
-    N       = 10 # Number of patients. N * RunIter Patients added at each Run.
-    run        = 0
+    t   = 100000
+    N   = 10 # Number of patients. N * RunIter Patients added at each Run.
+    run = 0
+
     run_stop = 0
     for i in range(1,t) :
         
         print("\n=====> Incremental analysis id # : {} \n".format(i))
-      
+        if (i==1):
+           
+            ######### ######### ######### ### T SNE ###### ######### ######### #########
+            X_cells_patients = np.append(XcellLines,XPatients,axis=0)
+            Y_cells_patients = np.append(YcellLines,global_annot,axis=0)
+          
+            Y_type_C =   ["C"] * len(YcellLines) 
+            Y_type_P  =  ["P"] * len(XPatients)  
+            #YcellLines you can use in replacement of labelcellLines_raw
+            Ycell_lines_type_C = list(map(concat_func,labelcellLines_raw,Y_type_C))
+            Ycell_lines_type_P = list(map(concat_func,global_annot,Y_type_P))
+           
+            Y_type = np.append(Ycell_lines_type_C,Ycell_lines_type_P,axis=0)
+
+            ######### ######### ######### ######### ######### #########
+           
+        # when n=1 , try to apply model of cell lines over All Patients.
+        # Some Patient will be annotated
+        # allPatients is a dict with patientID and type
         all_probas,annotationNewHeader,bestPatientsMES,bestPatientsEPI,allPatients,Xnew,Ynew = compute_proba_and_add_best_from_fitted_model(N,clf,XPatients,patientsID,parameters.threshold,i)
         all_probas_per_run.append(all_probas)
         
         bestPatientsMES_final = bestPatientsMES
-        
-        indexes = return_index(patientsID,bestPatientsMES)
-
+      
+        indexes           = return_index(patientsID,bestPatientsMES)
+        claudinLowASarray = np.asarray(list_annotation_global[0])
+        patientsIDASarray =  np.asarray(patientsID)
+ 
         run = i 
-        
-        print("allPatients : ")
-        print(len(allPatients))
+
   
         print("BestCandidates annotated in Patients and added to Cell Lines : {} ".format(len(allPatients)))
         patients_added.append([len(bestPatientsMES),len(bestPatientsEPI)])
         
         if (len(bestPatientsMES) == (patients_added[i-1][0])) :
             print("You are not adding more Basal B.")
-            #run_stop = i
+            
         
         if (len(allPatients) == (patients_added[i-1][0]+patients_added[i-1][1])) :
             print("You are not adding more patient in both group.")
-            run_stop = i # Run_stop use for diff absolute but it's deprecated
+            run_stop = i
             break
         
-        # We add the best to the model
+        # Add the best to the model
         X2test = np.append(XcellLines,Xnew,axis=0) #CellLines + Patients 
         Y2test = np.append(YcellLines,Ynew,axis=0) #CellLines + Patients 
+        
+         ######### ######### ######### ######### ######### ######### #########
+        indexesMES = return_index(patientsID,bestPatientsMES)
+        
+        indexesEPI= return_index(patientsID,bestPatientsEPI)
+        
+        global_annotAsArray = np.array(global_annot)
+        
+        global_annotAsArray[indexesMES]            = "BASALB"   
+        global_annotAsArray[indexesEPI]            = "Inverse_BASALB"   
+
+        claudinLowASarray = np.asarray(list_annotation_global[0])
+        
+        patientsIDASarray =  np.asarray(patientsID)
+        
+        X_cells_patients = np.append(XcellLines,XPatients,axis=0)
+        Y_cells_patients = np.append(YcellLines,global_annotAsArray.tolist(),axis=0)
+        
+        Y_type_C =   ["C"] * len(YcellLines) 
+        Y_type_P  =  ["P"] * len(XPatients)  
+        
+        #YcellLines you can use in replacement of labelcellLines_raw
+        Ycell_lines_type_C = list(map(concat_func,labelcellLines_raw,Y_type_C))
+        Ycell_lines_type_P = list(map(concat_func,global_annotAsArray.tolist(),Y_type_P))
+           
+        Y_type = np.append(Ycell_lines_type_C,Ycell_lines_type_P,axis=0)
+        #=====> Incremental analysis id # : 5
 
         clf = RandomForestClassifier(max_depth=maxdepth, min_samples_split = 0.1,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced",random_state=random_state)##random_state=5,
         clf.fit(X2test,Y2test)
 
         # Call it once be carefull if not this will create buggy results
         best_features_of_importance(clf,genesPatients,pathOutput,"cellLinesAndPatients",X2test,i*10,i)
-     
+            
         global_new_header.append(annotationNewHeader)
-        
-        if(run == run_stop) : break # If you do that clf is not 11 but 12....hummm
     
     logger.write("BasalFinal : "+str(len(bestPatientsMES_final))+"\n")
     
     global_new_header.append(global_annot)
     
-    print("\n=====> Feature selection with boruta algorithm \n")
-
-    random_state2 = []
-    if (parameters.randomStateBoruta != "No"):
-        random_state2 = [2274,931,3891,2845,6538,7524,5051,6298,877,7403]
-        #random_state2 = [4358,7315,3137,4079,8288,7711,7987,8850,7823,9659]
-    else :     random_state2 = np.random.randint(low=0, high=10000, size=10)
-    
-    veryBestof  = open(pathOutput+"outputBorutaPy.txt","w")
-    rsgenerated = open(pathOutput+"rsBorutaPy.txt","w")
-
-    allgeneskeep = []
-    for rs in random_state2 :
-        
-        clf2 = copy.deepcopy(clf) 
-        rsgenerated.write(str(rs)+"\n")
-        feat_selector    = BorutaPy(clf2, n_estimators='auto', verbose=0, random_state=rs)
-        feat_selector.fit(Xnew,Ynew)
-        geneskeep        = genesPatients[feat_selector.support_]
-        for i in geneskeep :  allgeneskeep.append(i)
-    
-    gene_to_count = wordListToFreqDict(allgeneskeep)    
-    
-
-    bedSubset = open(pathOutput+"outputBorutaPy.bed","w")
-    
-    veryBestofs = []
-    # Should be in the subbset of best feature
-    for gene2keep in sorted(list(set(allgeneskeep))):
-        rsgenerated.write(gene2keep+"\t"+str(gene_to_count[gene2keep])+"\n")
-        if (gene_to_count[gene2keep] >= 7 ) :
-            if (gene2keep in subset_dict_best_features_of_importance ) :
-                veryBestof.write(gene2keep+"\n")
-                veryBestofs.append(gene2keep)
-                id  = "NA_"+str(gene2keep.split("_")[0])+"_NA_NA_NA"
-                pos = str(gene2keep.split("_")[1])
-                chr = pos.split(":")[0]
-                coords = pos.split(":")[1]
-                coordStart =  coords.split("-")[0]
-                coordEnd   =  coords.split("-")[1]
-                bedSubset.write(chr+"    "+coordStart+"    "+coordEnd+"    "+id+"    "+"0"+"    "+"."+"\n")
-    veryBestof.close()  
-    bedSubset.close()  
-    rsgenerated.close()
-
-    indexes = return_index(genesPatients.tolist(),veryBestofs )#np.asarray()
-    X_bestfeatureboruta = Xnew[:, indexes]
-
     #############################################################################################
     #############################################################################################
-    #####################           Rscript Plotting                        #####################
+    #####################            Writing  Files                         #####################
     #############################################################################################
     #############################################################################################
+    
+    num_of_best_features = len(global_dict_best_features_of_importance) #20
 
-    num_of_best_features = len(global_dict_best_features_of_importance) 
+    ### WRITE THE Percentage of occurance between the run ####
+    occ = open(pathOutput+"/occurrencies.txt","w")
+    for gene in in_best_features_for_run_num:
+        for value_run in  in_best_features_for_run_num[gene] :
+            occ.write(gene+"\t"+str(value_run)+"\n")
+    occ.close()  
+    
 
     ### WRITE THE PROBABILITY OF EACH RUN ####
     probaFile = open(pathOutput+"/probas.txt","w")
@@ -1113,14 +1208,6 @@ if __name__ == '__main__':
         a+=1
     probaFile.close()
     
-    
-    ### WRITE THE Percentage of occurance between the run ####
-    occ = open(pathOutput+"/occurrencies.txt","w")
-    for gene in in_best_features_for_run_num:
-        for value_run in  in_best_features_for_run_num[gene] :
-            occ.write(gene+"\t"+str(value_run)+"\n")
-    occ.close()  
-    
     ### WRITE THE NUMBER OF PATIENTS ADDED ####
     patientsFile = open(pathOutput+"/patients_added.txt","w")
     o = 0
@@ -1129,7 +1216,7 @@ if __name__ == '__main__':
         if o == 0 : 
             o+=1
             continue
-        if o == tot : break 
+        if o == tot : break # Dont print the last it's when you add the same number of patients o you stop
         patientsFile.write(str(o)+"\t"+"BASALB-LIKE"+"\t"+str(add[0])+"\n")
         patientsFile.write(str(o)+"\t"+"BASALA-LIKE"+"\t"+str(add[1])+"\n")
 
@@ -1144,96 +1231,65 @@ if __name__ == '__main__':
     for gene in global_dict_best_features_of_importance:
         dict_to_order_by_meanvalue_of_features[gene] = np.sum(global_dict_best_features_of_importance[gene])
         index = 0 
-        mean = np.mean(global_dict_best_features_of_importance[gene])
+        
         if(gene in subset_dict_best_features_of_importance) :
             for feature in global_dict_best_features_of_importance[gene] : 
-                
-                bestBoruta = "NO"
-                if (gene in veryBestofs) : bestBoruta = "YES"
-                final.write(str(index+1)+"\t"+gene+"\t"+str(feature)+"\t"+bestBoruta+"\n")
-
-                bestBoruta = "NO"
-                if (gene in veryBestofs) : bestBoruta = "YES"
-                if (feature==0) :
-                    final2.write(str(index+1)+"\t"+gene+"\t"+str(np.log(1))+"\t"+bestBoruta+"\n")
-                    continue
-                
-                if (global_dict_best_features_of_importance[gene][0]==0) : # Don't plot the weirds where the ratio will fail
-                    continue
-                    
-                final2.write(str(index+1)+"\t"+gene+"\t"+str(np.log((feature/global_dict_best_features_of_importance[gene][0])+1))+"\t"+bestBoruta+"\n")
+                final.write(str(index+1)+"\t"+gene+"\t"+str(feature)+"\n")
+                final2.write(str(index+1)+"\t"+gene+"\t"+str(np.log((0.00001+feature)/(0.00001+global_dict_best_features_of_importance[gene][0])))+"\n")
 
                 index+=1
     final.close()  
     final2.close()  
-
+  
     ### WRITE THE DIFF FROM THE START POINT AND THE STOP ####
-    # Be carefull with run_stop
     final3 = open(pathOutput+"/features_final_absolute_diff.txt","w")
     index = 0 
-    #print(run_stop)
-    for gene in global_dict_best_features_of_importance:  
+
+    for gene in global_dict_best_features_of_importance:
+    
         if(gene in subset_dict_best_features_of_importance) :
             for feature in global_dict_best_features_of_importance[gene] :
-                bestBoruta = "NO"
-                if (gene in veryBestofs) : bestBoruta = "YES"
-                final3.write(str(index+1)+"\t"+gene+"\t"+str(global_dict_best_features_of_importance[gene][run_stop-2] - global_dict_best_features_of_importance[gene][0])+"\t"+bestBoruta+"\n")
+
+                final3.write(str(index+1)+"\t"+gene+"\t"+str(global_dict_best_features_of_importance[gene][run_stop-2] - global_dict_best_features_of_importance[gene][0])+"\n")
                 break
         index+=1
     final3.close()
 
     ### WRITE THE SUM OF ALL FEATURES ####
-    final2 = open(pathOutput+"/bed_features_final.bed","w")
     final7 = open(pathOutput+"/symbol_features_final.txt","w")
-
     final1 = open(pathOutput+"/sum_features_final.txt","w")
     final6 = open(pathOutput+"/sum_features_final_selectedatLeastOnceInaRun.txt","w")
 
     p = 1
     genes_set3= []
-    for index, value in sorted(dict_to_order_by_meanvalue_of_features.items(), key=lambda x: x[1], reverse=True) :
-        bestBoruta = "NO"
-        if (index in veryBestofs) : bestBoruta = "YES" 
-        final1.write(index+"\t"+str(value)+"\t"+bestBoruta+"\n")
+    for index, value in sorted(dict_to_order_by_meanvalue_of_features.items(), key=lambda x: x[1], reverse=True) : 
+        final1.write(index+"\t"+str(value)+"\n")
         
         if(index in subset_dict_best_features_of_importance) :
-            bestBoruta = "NO"
-            if (index in veryBestofs) : bestBoruta = "YES"
-            final6.write(index+"\t"+str(value)+"\t"+bestBoruta+"\n")
 
-        if ( p<= num_of_best_features):
+            final6.write(index+"\t"+str(value)+"\n")
 
-            final7.write(str(index.split("_")[0])+"\n")
+        if (p<=num_of_best_features):
+
+            final7.write(str(index)+"\n")
             genes_set3.append(str(index.split("_")[0])) 
-            id  = "NA_"+str(index.split("_")[0])+"_NA_NA_NA"
-            pos = str(index.split("_")[1])
-            chr = pos.split(":")[0]
-            coords = pos.split(":")[1]
-            coordStart =  coords.split("-")[0]
-            coordEnd   =  coords.split("-")[1]
-            final2.write(chr+"    "+coordStart+"    "+coordEnd+"    "+id+"    "+"0"+"    "+"."+"\n")
+   
 
         p+=1
     final1.close()
-    final2.close()
     final6.close()
     final7.close()
 
-    #####################    #####################
-    #####################    #####################
-    
-    # WRITE THE SPLICING OF TCGA PATIENT #####
-    #### This is crapy ####
+
     patients.to_csv(path_or_buf=pathOutput+"_NEW_BASALB.csv",sep="\t")
     # I reopen the file and I do it badely.
-    id="TCGA"
-    rewriteWithUpdatedHeader(pathOutput+"_NEW_BASALB.csv",global_new_header,"splicing",[],mainlistAnnotations,id)
+    rewriteWithUpdatedHeader_expression(pathOutput+"_NEW_BASALB.csv",global_new_header,"expression",[],mainlistAnnotations,"TCGA")
     # Remove this copy on disk
     remove ="rm "+pathOutput+"_NEW_BASALB.csv"
     removeCommand = subprocess.run((remove),stdout=subprocess.PIPE, stderr=subprocess.PIPE,universal_newlines=True,shell=True)
     print(removeCommand)
-
-    print("random_state Splicing : "+str(random_state))
+   
+    print("random_state Expression : "+str(random_state))
     rs = open(pathOutput+"/random_state.txt","w")
     rs.write(str(random_state)+"\n")
     rs.close()  
