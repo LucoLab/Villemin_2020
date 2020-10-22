@@ -6,7 +6,7 @@
 # author: Villemin Jean-Philippe
 # team: Epigenetic Component of Alternative Splicing - IGH
 #
-# annotFileWithSymbol
+
 # Usage : 
 # 
 # 
@@ -74,7 +74,6 @@ if (opt$endPoint =="PFI") {
 print(time)
 print(opt$endPoint)
 
-#print(geneList$V1[2])
 patient1 <- read.table(opt$listpatient1, header=FALSE,stringsAsFactors=FALSE)
 head(patient1)
 
@@ -87,11 +86,6 @@ print(tobepastedFinal)
 ####################################################################################
 #####################################  Package Loading  ############################
 ####################################################################################
-###Rscript /home/jean-philippe.villemin/code/RNA-SEQ/Rscript/SurvivalV2TPM.R -e OS -m /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/outputBasalTPM.csv -s /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/TCGA_CDR.csv
-#Rscript /home/jean-philippe.villemin/code/RNA-SEQ/Rscript/SurvivalV2TPM.R -e OS -m /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/FINAL.SF.csv -s /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/TCGA_CDR.csv
-
-#Rscript /home/jean-philippe.villemin/code/RNA-SEQ/Rscript/SurvivalV2TPM.R -e OS -m /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/outputBasalTPM.csv -s /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/TCGA_CDR.csv
-#Rscript /home/jean-philippe.villemin/code/RNA-SEQ/Rscript/SurvivalV2TPM.R -e $i -m /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/FINAL.SF.csv -s /home/jean-philippe.villemin/data/data/PROJECT/SURVIVAL/TCGA_CDR.csv
 
 survival <- read.table(opt$survival,sep=";", header=TRUE,stringsAsFactors=FALSE, comment.char = "@", na.strings = "#N/A", quote="" )
 survival_subset = subset(survival, select = c("bcr_patient_barcode",time,opt$endPoint))
