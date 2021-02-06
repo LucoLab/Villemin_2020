@@ -746,8 +746,9 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
 
     YlistOfNewLabel     = []
     basalB_probas             = clf.predict_proba(X)[:,0]
-
+    
     index               = list(range(0 ,len(X))) #< 1 - threshold
+    print("DEGUB: {} ".format(len(X)))
     global indicesRunAddedBasalB
     global indicesRunAddedOther
   
@@ -758,9 +759,7 @@ def compute_proba_and_add_best_from_fitted_model(N,clf,X,patientsID,threshold,it
 
     number_bad = 0
     for elem in listofTuples[-n:] :#[-n:][-n:]
-     
         if(1 - elem[1] < threshold  ) : continue
-        
         allPatients[patientsID[elem[0]]] = "Inverse_BASALB"
         # Comment these lines if you want to add them in the model
         index_best_patient.append(elem[0])
@@ -916,7 +915,7 @@ if __name__ == '__main__':
     full_path_script_python = os.path.abspath(pathname)
     
     basepath =  full_path_script_python.replace("src", "")
-    basepathforData =  basepath+"data/"
+    basepathforData =  basepath+"data/full_matrices/"
 
     print("Files will be written in :")
 
@@ -974,14 +973,13 @@ if __name__ == '__main__':
 
 
     clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced",random_state=random_state )#random_state=13#random_state=5,,class_weight="balanced"
-
     # Global variable
     global_annot =  ["UNKNOW"] * len(XPatients)  #list(range(len(XPatients)))
 
     # Fit model  on Cell Lines
     print("\nFit model simply on all the cell lines : ")
     clf.fit(XcellLines,YcellLines)
-   
+        
     
     global_new_header      = []
     global_bestCandidates  = []
