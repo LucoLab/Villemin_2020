@@ -69,7 +69,7 @@ def main():
     ### Logging
     mess="Output directory: {} \n".format(pathOutput)
     mess+="Assignment threshold: {}\n".format(parameters.threshold)
-    mess+="Number of runs: {}\n".format(max_run)
+    mess+="Maximum number of runs: {}\n".format(max_run)
     mess+="Increment rate: {}\n".format(parameters.increment_rate)
     mess+="Number of trees: {}\n".format(parameters.nestimators)
     mess+="Max depth: {}\n".format(parameters.maxdepth)
@@ -96,7 +96,7 @@ def main():
     c2p.import_data(parameters.matrice_cellLines, labelled=True)
     c2p.import_data(parameters.matrice_patients, labelled=False)
     if verbose:
-        print("Done.\nRunning the cell to patient transfer learning...", end="", flush=True)
+        print("Done.\nRunning the cell to patient transfer learning...", flush=True)
     X, Y=c2p.run()
     if verbose:
         print("Done.", flush=True)
@@ -104,6 +104,9 @@ def main():
         logger.debug(mess)
         print(mess)
         print("Running the boruta feature selection on the new data")
+    if sum(Y) == 0 or sum(Y) == len(Y):
+        print("Impossible to run boruta with patients from just a single class.")
+        return
     supports=[]
     ranking=[]
     for it, rs in enumerate(boruta_random_state):
@@ -134,6 +137,7 @@ def main():
                 oa.write("\n")
                 if supp >= elite_sel:
                     ob.write("{}\t{}\n".format(feat, supp))
+    print("Cell2Patients finished successfully. You can find your results in {}.\n".format(pathOutput))
     
     
 if __name__ == "__main__":

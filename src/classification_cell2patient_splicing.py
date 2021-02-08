@@ -972,14 +972,13 @@ if __name__ == '__main__':
     clf = ""
 
 
-    clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced",random_state=random_state )#random_state=13#random_state=5,,class_weight="balanced"
+    clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced",random_state=random_state, max_features=None )#random_state=13#random_state=5,,class_weight="balanced"
     # Global variable
     global_annot =  ["UNKNOW"] * len(XPatients)  #list(range(len(XPatients)))
 
     # Fit model  on Cell Lines
     print("\nFit model simply on all the cell lines : ")
     clf.fit(XcellLines,YcellLines)
-        
     
     global_new_header      = []
     global_bestCandidates  = []
@@ -1006,7 +1005,6 @@ if __name__ == '__main__':
       
         all_probas,annotationNewHeader,bestPatientsMES,bestPatientsEPI,allPatients,Xnew,Ynew = compute_proba_and_add_best_from_fitted_model(N,clf,XPatients,patientsID,parameters.threshold,i)
         all_probas_per_run.append(all_probas)
-        
         bestPatientsMES_final = bestPatientsMES
         
         indexes = return_index(patientsID,bestPatientsMES)
@@ -1034,7 +1032,6 @@ if __name__ == '__main__':
 
         clf = RandomForestClassifier(max_depth=maxdepth, min_samples_split = 0.1,n_estimators=parameters.nestimators,n_jobs=-1,class_weight="balanced",random_state=random_state)##random_state=5,
         clf.fit(X2test,Y2test)
-
         # Call it once be carefull if not this will create buggy results
         best_features_of_importance(clf,genesPatients,pathOutput,"cellLinesAndPatients",X2test,i*10,i)
      
