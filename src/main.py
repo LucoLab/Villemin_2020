@@ -22,8 +22,9 @@ def main():
     parser.add_argument("-n", "--nestimators", action="store", help="Number of trees in the random forest classifier", required=False, type=int, default="1000", dest='nestimators')
     parser.add_argument("-m", "--maxdepth", action="store", help="Random forest max depth (-1 == None )", default="-1", type=int, dest='maxdepth')
     parser.add_argument("-M", "--max-run", action="store", help="Maximum iterations for the learning transfer", default=1000, type=int, dest='max_run')
-    parser.add_argument("-r", "--randomState", action="store", help="Fix RandomState", required=False, type=int, default=2955, dest='randomState')
-    parser.add_argument("-b", "--boruta-iterations", action="store", help="Repeat the boruta feature selection multiple times. You can also give fixed random states ( ex: [123,456,789] ). ", required=False, default="[2274,931,3891,2845,6538,7524,5051,6298,877,7403]", type=str, dest='boruta')
+    parser.add_argument("-r", "--randomState", action="store", help="Fix RandomState.", required=False, type=int, default=2955, dest='randomState')
+    parser.add_argument("--scale", action="store_true", help="Scale the features of cell lines and patients independently", default=False, required=False)
+    parser.add_argument("-b", "--boruta-iterations", action="store", help="Repeat the boruta feature selection multiple times. If random state is fixed, boruta random states will be seeded with it. ", required=False, default="10", type=int, dest='boruta')
     parser.add_argument("-s", "--boruta-elite", action="store", help="Number of times a feature has to be selected to be considered elite. If between 0 and 1, considered as fraction of the total boruta iterations.", required=False, default=0.7, type=float, dest='boruta_sel')
     parser.add_argument("--debug", action="store_true", help="Debug mode", required=False)
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose", default=False, required=False)
@@ -55,12 +56,11 @@ def main():
         random_state = np.random.randint(low=0, high=10000, size=1)[0]
     else : 
         random_state = parameters.randomState
-    boruta_random_state = []
-    if parameters.boruta[0] == "[" and parameters.boruta[-1] == "]":
-        tmp=parameters.boruta.replace("[", "").replace("]","").split(",")
-        for n in tmp:
-            boruta_random_state.append(int(n))
-    else: 
+    boruta_iterations= parameters.boruta
+    np.random.seed(random_state)
+    if parameters.boruta == 10 and parameters.randomState != False:
+        boruta_random_state=[2274,931,3891,2845,6538,7524,5051,6298,877,7403]
+    else:
         boruta_random_state = np.random.randint(low=0, high=10000, size=int(parameters.boruta))
     if parameters.boruta_sel > 0 and parameters.boruta_sel < 1:
         elite_sel=int(np.ceil(parameters.boruta_sel *  len(boruta_random_state)))
@@ -73,11 +73,15 @@ def main():
     mess+="Increment rate: {}\n".format(parameters.increment_rate)
     mess+="Number of trees: {}\n".format(parameters.nestimators)
     mess+="Max depth: {}\n".format(parameters.maxdepth)
+    mess+="Scale: {}\n".format(parameters.normalize)
     mess+="Cell line matrix: {}\n".format(parameters.matrice_cellLines)
     mess+="Patients matrix: {}\n".format(parameters.matrice_patients)
-    mess+="Random state: {}\n".format(random_state)
-    mess+="Boruta random state: {}\n".format(boruta_random_state)
+    mess+="Boruta iterations: {}\n".format(boruta_iterations)
     mess+="Boruta elite selection: {}\n".format(elite_sel)
+    mess+="Random state: {}\n".format(random_state)
+    mess+="Boruta random states: {}\n".format(boruta_random_state)
+    
+    
     if verbose:
         print(mess)
     logger.debug(mess)
@@ -89,10 +93,11 @@ def main():
     from boruta import BorutaPy
     
     
-    clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,min_samples_split = 0.1,n_jobs=-1,class_weight="balanced",random_state=random_state )
+    clf = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,min_samples_split=2, n_jobs=-1,class_weight="balanced",random_state=random_state)
+    clf_t = RandomForestClassifier(max_depth=maxdepth,n_estimators=parameters.nestimators,min_samples_split = 0.1,n_jobs=-1,class_weight="balanced",random_state=random_state)
     if verbose:
         print("Reading the data...", end="", flush=True)
-    c2p = Cell2Patients(clf,max_run=max_run,threshold=parameters.threshold,increment_rate=parameters.increment_rate, out_dir="{}/transfer/".format(pathOutput))
+    c2p = Cell2Patients(clf=clf, clf_transfer= clf_t,max_run=max_run,threshold=parameters.threshold,increment_rate=parameters.increment_rate, out_dir="{}/transfer/".format(pathOutput), verbose=verbose, normalize=parameters.normalize)
     c2p.import_data(parameters.matrice_cellLines, labelled=True)
     c2p.import_data(parameters.matrice_patients, labelled=False)
     if verbose:
@@ -112,7 +117,7 @@ def main():
     for it, rs in enumerate(boruta_random_state):
         if verbose:
             print("Iteration {}...".format(it), end="", flush=True)
-        boruta = BorutaPy(clone(clf), n_estimators='auto', verbose=0, random_state=rs)
+        boruta = BorutaPy(clone(clf_t), n_estimators='auto', verbose=0, random_state=rs)
         boruta.fit(X,Y)
         if verbose:
             logger.debug("boruta iteration {} : identified {} features.".format(it, sum(boruta.support_)))

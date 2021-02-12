@@ -3,14 +3,22 @@ import os
 import numpy as np 
 import logging
 logger = logging.getLogger("Cell2Patients")
-from sklearn.preprocessing import Imputer
+from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages 
+from sklearn.preprocessing import StandardScaler
 import warnings
+from sklearn.decomposition import PCA
+
 
 class Cell2Patients():
-    def __init__(self, clf, threshold, max_run=None, out_dir="./semi_supervised/", field_separator="\t", increment_rate =10, verbose=True):
+    def __init__(self, clf,threshold,clf_transfer=None,  max_run=None, out_dir="./semi_supervised/", field_separator="\t", increment_rate =10, verbose=True, normalize=False):
         self._clf=clone(clf)
+        if clf_transfer == None:
+            self._clf_transfer=clone(clf)
+        else:
+            self._clf_transfer=clf_transfer
+        self._normalize=normalize
         self._increment_rate=increment_rate
         self._max_run=max_run
         self._out_dir=os.path.realpath(out_dir)
@@ -22,6 +30,7 @@ class Cell2Patients():
         self._names_u=[]
         self._features_u=[]
         self._Y=[]
+        self._patient_added=[]
         self._verbose=verbose
         self._FS=field_separator
         self._leftover=""
@@ -89,13 +98,15 @@ class Cell2Patients():
             self._features_u[i]=self._features.index(self._features_u[i])
         warnings.filterwarnings("ignore")
         self._Y=np.asarray(self._Y)
-        imp = Imputer(strategy="mean",verbose=1,axis = 1)
-        self._Xl=imp.fit_transform(np.array(self._Xl)[self._features_l,:]).T
-        imp = Imputer(strategy="mean",verbose=1,axis = 1)
-        self._Xu=imp.fit_transform(np.array(self._Xu)[self._features_u,:]).T
+        self._Xl=SimpleImputer(strategy="mean").fit_transform(np.array(self._Xl)[self._features_l,:].T)
+        self._Xu=SimpleImputer(strategy="mean").fit_transform(np.array(self._Xu)[self._features_u,:].T)
+        if self._normalize:
+            self._Xl = StandardScaler().fit_transform(self._Xl)
+            self._Xu = StandardScaler().fit_transform(self._Xu)
         self._Ypatients=[-1 for _ in self._names_u]
         self._mex("Working with {} {} and {} {} cell lines".format(sum(self._Y), self._class_names[1], len(self._Y) - sum(self._Y), self._class_names[1]  ))
-        
+    
+    
     def run(self):
         self._initData()
         self._mex("Starting the tranfer learning of {} cell lines to {} patients".format(
@@ -113,9 +124,10 @@ class Cell2Patients():
             gen+=1
             self._mex("-"*20)
             self._mex("Training the generation number {}".format(gen))
-            clf=clone(self._clf)
-            if gen==1:
-                clf.set_params(min_samples_split =2)
+            if gen == 1:
+                clf=clone(self._clf)
+            else:
+                clf=clone(self._clf_transfer)
             clf.fit(Xl, Y)
             self._feature_importances.append(clf.feature_importances_)
             newX, newY , novel = self._evaluate(clf, transferred, gen*self._increment_rate)
@@ -133,6 +145,7 @@ class Cell2Patients():
                 self._mex("Adding {} patients, {} novel:".format(len(newY), novel[0]+novel[1]))
                 self._mex(" - {} labelled as {} ( {} novel ) ".format(len(newY)-sum(newY), self._class_names[0], novel[0]))
                 self._mex(" - {} labelled as {} ( {} novel ) ".format(sum(newY), self._class_names[1], novel[1]))
+                self._patient_added.append([len(newY)-sum(newY), sum(newY)])
                 Xl = np.append(self._Xl,newX,axis=0)
                 Y  = np.append(self._Y, newY,axis=0)
             prev_novel=novel.copy()
@@ -190,33 +203,82 @@ class Cell2Patients():
                 newLabels.append(label)
                 newHandles.append(handle)
         plt.legend(newHandles, newLabels)
+        plt.title("Top10 feature importance evolution")
         plt.savefig(pdf, format="pdf")
+        
         return
     
+    def _plot_bar(self, pdf):
+        plt.close()
+        plt.bar([v-0.21 for v in range(1, len(self._patient_added)+1)], [v[0] for v in self._patient_added], width=0.40,  color="#F8766D", label=self._class_names[0])
+        plt.bar([v+0.21 for v in range(1, len(self._patient_added)+1)], [v[1] for v in self._patient_added], width=0.40, color="#00BFC4", label=self._class_names[1])
+        plt.xlabel("Round")
+        plt.ylabel("Number of patients added")
+        plt.title("Patients added each round")
+        plt.savefig(pdf, format="pdf")
+        handles, labels = plt.gca().get_legend_handles_labels()
+        newLabels, newHandles = [], []
+        for handle, label in zip(handles, labels):
+            if label not in newLabels:
+                newLabels.append(label)
+                newHandles.append(handle)
+        plt.legend(newHandles, newLabels)
+        plt.legend()
+        plt.close()
+    
+    def _plotPCA(self, pdf):
+        X_pca= PCA(n_components=2, svd_solver='full').fit_transform(self._Xl)
+        plt.close()
+        colors = ['#F8766D', '#00BFC4', 'grey']
+        for i in range(2) :
+            plt.scatter(X_pca[self._Y == i, 0], X_pca[self._Y == i, 1], color=colors[i], lw=2, label="{}".format(self._class_names[i]))
+        plt.legend()
+        plt.title("Cell lines PCA")
+        plt.savefig(pdf, format="pdf")
+        plt.close()
+        X_pca= PCA(n_components=2, svd_solver='full').fit_transform(self._Xu)
+        class_names=self._class_names.copy()
+        class_names.append("Unclassified")
+        Y=np.array(self._Ypatients)
+        for i in range(-1,2) :
+            plt.scatter(X_pca[Y == i, 0], X_pca[Y == i, 1], color=colors[i], lw=2, label="{}".format(class_names[i]) )
+        plt.legend()
+        plt.title("Patients PCA")
+        plt.savefig(pdf, format="pdf")
+        plt.close()
+
     
     def _plot_proba(self,pdf):
         plt.close()
         n_gen=len(self._patients_proba)
-        plt.plot(range(n_gen), [0.6 for _ in range(n_gen)], "--", color="grey")
-        plt.plot(range(n_gen), [0.4 for _ in range(n_gen)], "--", color="grey")
+        plt.plot(range(n_gen), [self._thr for _ in range(n_gen)], "--", color="grey")
+        plt.plot(range(n_gen), [1-self._thr for _ in range(n_gen)], "--", color="grey")
         for gen in range(n_gen):
             blue, red, grey=[],[],[]
             for p in self._patients_proba[gen]:
-                if p >= 0.6:
+                if p >= self._thr:
                     red.append(p)
-                elif p<= 0.4:
+                elif p<= 1-self._thr :
                     blue.append(p)
                 else:
                     grey.append(p)
             if len(red) > 0:
-                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(red))], red, ".r", )
+                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(red))], red, ".", color="#F8766D", label=self._class_names[0] )
             if len(blue) > 0:
-                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(blue))], blue, ".b", )
+                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(blue))], blue, ".", color="#00BFC4" , label=self._class_names[1])
             if len(grey) > 0:
-                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(grey))], grey, ".", color="grey" )
+                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(grey))], grey, ".", color="grey" ,label="Unclassified")
         plt.xlabel("Generation")
         plt.ylabel("{} Probability".format(self._class_names[0]))
         plt.ylim(0,1)
+        plt.title("Patients probabilities")
+        handles, labels = plt.gca().get_legend_handles_labels()
+        newLabels, newHandles = [], []
+        for handle, label in zip(handles, labels):
+            if label not in newLabels:
+                newLabels.append(label)
+                newHandles.append(handle)
+        plt.legend(newHandles, newLabels)
         plt.savefig(pdf, format="pdf")
         plt.close() 
         return
@@ -236,13 +298,14 @@ class Cell2Patients():
                 else:
                     grey.append(p)
             if len(red) > 0:
-                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(red))], red, ".r", )
+                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(red))], red, ".", color="#F8766D" )
             if len(blue) > 0:
-                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(blue))], blue, ".b", )
+                plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(blue))], blue, ".", color="#00BFC4"  )
             if len(grey) > 0:
                 plt.plot([gen + ((np.random.rand() - np.random.rand())*0.3) for _ in range(len(grey))], grey, ".", color="grey" )
         plt.xlabel("Generation")
         plt.ylabel("{} Probability".format(self._class_names[0]))
+        plt.title("Cell lines probabilities")
         plt.ylim(0,1)
         plt.savefig(pdf, format="pdf")
         plt.close() 
@@ -269,6 +332,8 @@ class Cell2Patients():
         self._plot_importances(pdf)
         self._plot_proba(pdf)
         self._plot_proba_cells(pdf)
+        self._plot_bar(pdf)
+        self._plotPCA(pdf)
         pdf.close()
         with open("{}/feature_importances.tsv".format(self._out_dir), "w") as ofs:
             ofs.write("Generation\tFeatureName\tImportance\n")
